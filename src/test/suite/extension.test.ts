@@ -5,7 +5,7 @@ suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Start all tests.');
 
   test('Command is registered', async () => {
-    const ext = vscode.extensions.getExtension('trist.double-shift-search');
+    const ext = vscode.extensions.getExtension('tristanbudd.double-shift-search');
     await ext?.activate();
 
     const commands = await vscode.commands.getCommands(true);

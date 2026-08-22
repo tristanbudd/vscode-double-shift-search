@@ -35,13 +35,16 @@ Double Shift Search is a VS Code extension. You will need Node.js 18+ installed.
     - Follow existing patterns (TypeScript for logic, VS Code API for integration).
 
 3. **Run Local Checks:**
-   Before committing, ensure everything is green:
+   Before committing, ensure everything is green. Note that we use **Husky** and **lint-staged**, so `eslint --fix` will run automatically when you commit!
 
    ```bash
-   # Check Linting & Formatting
+   # Check Types & Build Extension (uses esbuild)
+   npm run compile
+
+   # Check Linting & Formatting manually
    npm run lint
 
-   # Check Tests
+   # Run Tests
    npm run test
    ```
 

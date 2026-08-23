@@ -25,19 +25,14 @@ Double Shift Search allows you to quickly open the command palette, find files, 
 
 ## Features
 
-- **Double Shift Trigger**: Quickly hit `Shift` twice in rapid succession to trigger the configured action.
-- **Customizable Action**: Configure exactly what opens when you trigger the double shift. Choose from Quick Text Search, Find in Files, Quick Open (Go to File), Command Palette, or Go to Symbol.
-- **Native Integration**: Seamlessly hooks into VS Code's native commands without lag.
+- **Double Shift Trigger**: Hit `Shift` twice in rapid succession to instantly open the Search Everywhere palette.
+- **Unified Custom Palette**: A bespoke interface that replicates the beloved JetBrains Search Everywhere experience, natively integrated into VS Code without any clunky UI switching.
+- **Deep Content Search**: Searches the actual contents of your files instantly, smartly skipping heavy assets (archives, media, binaries) for maximum speed.
+- **Workspace Symbols**: Automatically queries your workspace symbols so you can instantly jump straight to classes, methods, and functions.
+- **Smart Multi-Term Fuzzy Matching**: Need something specific? Type multiple words (e.g., `folder config`) and it will intelligently match across your entire workspace.
+- **Open Editors First**: Prioritizes your currently open files at the top of the list for lightning-fast context switching.
 
-### Configuration Options
-
-You can adjust what the double shift triggers by setting `doubleShiftSearch.targetCommand` in your VS Code settings. Available options include:
-
-- `workbench.action.quickOpen` (Default): Opens the quick file picker (Go to File) to jump to any file.
-- `workbench.action.quickTextSearch`: Opens the global quick search to find text across all files in your workspace.
-- `workbench.action.findInFiles`: Opens the search view in the sidebar to search text across your workspace.
-- `workbench.action.showCommands`: Opens the Command Palette to execute any VS Code command.
-- `workbench.action.gotoSymbol`: Opens the symbol picker to navigate to classes, methods, or variables in the active editor.
+*(Note: In previous versions, the double-shift trigger mapped to native VS Code command palette views. Starting in v1.0.0, Double Shift Search uses a completely custom unified search engine for the true JetBrains experience!)*
 
 ---
 

@@ -12,10 +12,4 @@ suite('Extension Test Suite', () => {
     const hasCommand = commands.includes('doubleShiftSearch.search');
     assert.strictEqual(hasCommand, true);
   });
-
-  test('Configuration can be read', () => {
-    const config = vscode.workspace.getConfiguration('doubleShiftSearch');
-    const targetCommand = config.get<string>('targetCommand');
-    assert.strictEqual(targetCommand, 'workbench.action.quickOpen');
-  });
 });

@@ -46,30 +46,15 @@
         "command": "doubleShiftSearch.search",
         "key": "shift shift"
       }
-    ],
-    "configuration": {
-      "title": "Double Shift Search",
-      "properties": {
-        "doubleShiftSearch.targetCommand": {
-          "type": "string",
-          "default": "workbench.action.quickOpen",
-          "description": "The target command to execute when double pressing shift",
-          "enum": [
-            "workbench.action.quickTextSearch",
-            "workbench.action.findInFiles",
-            "workbench.action.quickOpen",
-            "workbench.action.showCommands",
-            "workbench.action.gotoSymbol"
-          ]
-        }
-      }
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "tsc -p ./ && npm run build-ext",
     "build-ext": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
-    "watch": "tsc -watch -p ./ & esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "watch": "npm-run-all -p watch:*",
+    "watch:tsc": "tsc -watch -p ./",
+    "watch:esbuild": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "package": "npm run compile && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
@@ -90,6 +75,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "mocha": "^10.2.0",
+    "npm-run-all": "^4.1.5",
     "typescript": "^4.9.5"
   },
   "lint-staged": {

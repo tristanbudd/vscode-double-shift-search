@@ -13,7 +13,7 @@ interface SearchItem extends vscode.QuickPickItem {
 
 let cachedFilesPromise: Thenable<vscode.Uri[]> | undefined;
 
-function fuzzyMatch(pattern: string, text: string): boolean {
+export function fuzzyMatch(pattern: string, text: string): boolean {
   if (!pattern) {
     return true;
   }
@@ -46,6 +46,8 @@ async function showSearchEverywhere() {
   quickPick.placeholder = 'Search Everywhere (Files, Symbols, Open Editors)';
   quickPick.matchOnDescription = true;
   quickPick.matchOnDetail = true;
+
+  let isDisposed = false;
 
   const config = vscode.workspace.getConfiguration('doubleShiftSearch');
   if (config.get<boolean>('useSelectionAsQuery')) {
@@ -140,6 +142,7 @@ async function showSearchEverywhere() {
     }
 
     symbolTimeout = setTimeout(async () => {
+      if (isDisposed) { return; }
       quickPick.busy = true;
       try {
         const symbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
@@ -173,7 +176,7 @@ async function showSearchEverywhere() {
           textItems = await searchFileContents(value, files, () => currentSearchId !== textSearchId);
         }
 
-        if (currentSearchId === textSearchId) {
+        if (currentSearchId === textSearchId && !isDisposed) {
           let finalItems = currentItems.filter(item => 
               item.label !== '$(warning) No results found' && 
               item.label !== '$(sync~spin) Searching...'
@@ -197,7 +200,7 @@ async function showSearchEverywhere() {
       } catch (e) {
         console.error('Failed to fetch Deep Search results', e);
       } finally {
-        if (currentSearchId === textSearchId) {
+        if (currentSearchId === textSearchId && !isDisposed) {
           quickPick.busy = false;
         }
       }
@@ -241,15 +244,18 @@ async function showSearchEverywhere() {
     quickPick.hide();
   });
 
-  quickPick.onDidHide(() => quickPick.dispose());
+  quickPick.onDidHide(() => {
+    isDisposed = true;
+    quickPick.dispose();
+  });
 }
 
 export function deactivate() { }
 
-async function searchFileContents(query: string, files: vscode.Uri[], isCancelled: () => boolean, maxResults = 50): Promise<SearchItem[]> {
+export async function searchFileContents(query: string, files: vscode.Uri[], isCancelled: () => boolean, maxResults = 50): Promise<SearchItem[]> {
   const results: SearchItem[] = [];
-  const lowerQuery = query.toLowerCase();
-  const batchSize = 50;
+  const queryRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const batchSize = 20;
 
   const config = vscode.workspace.getConfiguration('doubleShiftSearch');
   const excludeExtensionsList = config.get<string[]>('excludeExtensions') || [
@@ -283,13 +289,14 @@ async function searchFileContents(query: string, files: vscode.Uri[], isCancelle
         }
 
         const content = await fs.readFile(uri.fsPath, 'utf8');
-        const index = content.toLowerCase().indexOf(lowerQuery);
+        const match = queryRegex.exec(content);
 
-        if (index !== -1) {
+        if (match) {
+          const index = match.index;
           const startOfLine = content.lastIndexOf('\n', index) + 1;
           let endOfLine = content.indexOf('\n', index);
-          if (endOfLine === -1) {
-            endOfLine = content.length;
+          if (endOfLine === -1 || endOfLine - startOfLine > 500) {
+            endOfLine = Math.min(content.length, startOfLine + 500);
           }
 
           const lineText = content.slice(startOfLine, endOfLine).trim();

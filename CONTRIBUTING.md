@@ -56,7 +56,7 @@ Double Shift Search is a VS Code extension. You will need Node.js 18+ installed.
    ```
 
 5. **Open a Pull Request:**
-   Target the `main` branch. Provide a clear description of the changes using the provided PR template and link any relevant issues.
+   Target the `master` branch. Provide a clear description of the changes using the provided PR template and link any relevant issues.
 
 ## Guidelines & Best Practices
 

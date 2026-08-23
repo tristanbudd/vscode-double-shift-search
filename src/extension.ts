@@ -173,7 +173,28 @@ async function showSearchEverywhere() {
         let textItems: SearchItem[] = [];
         if (currentSearchId === textSearchId) {
           const files = await (cachedFilesPromise || Promise.resolve([]));
-          textItems = await searchFileContents(value, files, () => currentSearchId !== textSearchId);
+          
+          const activeEditor = vscode.window.activeTextEditor;
+          const activeUriString = activeEditor?.document.uri.toString();
+          const openUris = new Set(openEditors.map(e => e.uri?.toString()));
+
+          const sortedFiles = [...files].sort((a, b) => {
+            const aUri = a.toString();
+            const bUri = b.toString();
+            
+            if (aUri === activeUriString && bUri !== activeUriString) { return -1; }
+            if (aUri !== activeUriString && bUri === activeUriString) { return 1; }
+            
+            const aIsOpen = openUris.has(aUri);
+            const bIsOpen = openUris.has(bUri);
+            
+            if (aIsOpen && !bIsOpen) { return -1; }
+            if (!aIsOpen && bIsOpen) { return 1; }
+            
+            return 0;
+          });
+
+          textItems = await searchFileContents(value, sortedFiles, () => currentSearchId !== textSearchId);
         }
 
         if (currentSearchId === textSearchId && !isDisposed) {
@@ -269,26 +290,33 @@ export async function searchFileContents(query: string, files: vscode.Uri[], isC
     }
 
     const batch = files.slice(i, i + batchSize);
-    await Promise.all(batch.map(async (uri) => {
+    const batchResults = await Promise.all(batch.map(async (uri): Promise<SearchItem[]> => {
       try {
-        if (isCancelled() || results.length >= maxResults) {
-          return;
+        if (isCancelled()) {
+          return [];
         }
         if (uri.scheme !== 'file') {
-          return;
+          return [];
         }
 
         const ext = path.extname(uri.fsPath).toLowerCase();
         if (skipExtensions.has(ext)) {
-          return;
+          return [];
         }
 
-        const stat = await fs.stat(uri.fsPath);
-        if (stat.size > 1024 * 1024) {
-          return;
+        let content: string;
+        const openDoc = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
+        if (openDoc) {
+          content = openDoc.getText();
+        } else {
+          const stat = await fs.stat(uri.fsPath);
+          if (stat.size > 1024 * 1024) {
+            return [];
+          }
+          content = await fs.readFile(uri.fsPath, 'utf8');
         }
 
-        const content = await fs.readFile(uri.fsPath, 'utf8');
+        const fileResults: SearchItem[] = [];
         const match = queryRegex.exec(content);
 
         if (match) {
@@ -302,7 +330,7 @@ export async function searchFileContents(query: string, files: vscode.Uri[], isC
           const lineText = content.slice(startOfLine, endOfLine).trim();
           const lineNumber = content.slice(0, index).split('\n').length;
 
-          results.push({
+          fileResults.push({
             label: `$(text-size) ${path.basename(uri.fsPath)}:${lineNumber}`,
             description: lineText.length > 80 ? lineText.substring(0, 80) + '...' : lineText,
             type: 'text',
@@ -311,9 +339,19 @@ export async function searchFileContents(query: string, files: vscode.Uri[], isC
             alwaysShow: true
           });
         }
+        return fileResults;
       } catch (e) {
+        return [];
       }
     }));
+
+    for (const fileResults of batchResults) {
+      for (const result of fileResults) {
+        if (results.length < maxResults) {
+          results.push(result);
+        }
+      }
+    }
 
     await new Promise(resolve => setTimeout(resolve, 0));
   }

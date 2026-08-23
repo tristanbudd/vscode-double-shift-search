@@ -32,7 +32,11 @@ Double Shift Search allows you to quickly open the command palette, find files, 
 - **Smart Multi-Term Fuzzy Matching**: Need something specific? Type multiple words (e.g., `folder config`) and it will intelligently match across your entire workspace.
 - **Open Editors First**: Prioritizes your currently open files at the top of the list for lightning-fast context switching.
 
-*(Note: In previous versions, the double-shift trigger mapped to native VS Code command palette views. Starting in v1.0.0, Double Shift Search uses a completely custom unified search engine for the true JetBrains experience!)*
+### Configuration
+
+You can customize the behavior of Double Shift Search in your VS Code settings:
+- `doubleShiftSearch.useSelectionAsQuery` (Default: `false`): Automatically pre-fills the search palette with the text you currently have selected in your active editor.
+- `doubleShiftSearch.excludeExtensions` (Default: `['.zip', '.tar', '.png', ...] `): A list of file extensions to completely ignore when searching file contents.
 
 ---
 

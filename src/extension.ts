@@ -13,10 +13,6 @@ interface SearchItem extends vscode.QuickPickItem {
 
 let cachedFilesPromise: Thenable<vscode.Uri[]> | undefined;
 
-const SKIP_EXTENSIONS = new Set([
-  '.zip', '.tar', '.gz', '.7z', '.rar', '.exe', '.dll', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.mp4', '.mp3'
-]);
-
 function fuzzyMatch(pattern: string, text: string): boolean {
   if (!pattern) {
     return true;
@@ -50,6 +46,14 @@ async function showSearchEverywhere() {
   quickPick.placeholder = 'Search Everywhere (Files, Symbols, Open Editors)';
   quickPick.matchOnDescription = true;
   quickPick.matchOnDetail = true;
+
+  const config = vscode.workspace.getConfiguration('doubleShiftSearch');
+  if (config.get<boolean>('useSelectionAsQuery')) {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor && !activeEditor.selection.isEmpty) {
+      quickPick.value = activeEditor.document.getText(activeEditor.selection);
+    }
+  }
 
   quickPick.busy = true;
   quickPick.show();
@@ -247,6 +251,12 @@ async function searchFileContents(query: string, files: vscode.Uri[], isCancelle
   const lowerQuery = query.toLowerCase();
   const batchSize = 50;
 
+  const config = vscode.workspace.getConfiguration('doubleShiftSearch');
+  const excludeExtensionsList = config.get<string[]>('excludeExtensions') || [
+    '.zip', '.tar', '.gz', '.7z', '.rar', '.exe', '.dll', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.mp4', '.mp3'
+  ];
+  const skipExtensions = new Set(excludeExtensionsList.map(ext => ext.toLowerCase()));
+
   for (let i = 0; i < files.length; i += batchSize) {
     if (isCancelled() || results.length >= maxResults) {
       break;
@@ -263,7 +273,7 @@ async function searchFileContents(query: string, files: vscode.Uri[], isCancelle
         }
 
         const ext = path.extname(uri.fsPath).toLowerCase();
-        if (SKIP_EXTENSIONS.has(ext)) {
+        if (skipExtensions.has(ext)) {
           return;
         }
 

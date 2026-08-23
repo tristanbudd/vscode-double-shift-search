@@ -46,7 +46,28 @@
         "command": "doubleShiftSearch.search",
         "key": "shift shift"
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Double Shift Search",
+      "properties": {
+        "doubleShiftSearch.useSelectionAsQuery": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically pre-fill the search palette with the text currently selected in the active editor."
+        },
+        "doubleShiftSearch.excludeExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".zip", ".tar", ".gz", ".7z", ".rar", ".exe", ".dll", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".mp4", ".mp3"
+          ],
+          "description": "A list of file extensions that should be completely ignored when performing a deep text search."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

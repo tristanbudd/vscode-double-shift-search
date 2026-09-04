@@ -226,6 +226,36 @@ async function showSearchEverywhere() {
           };
         });
 
+        const getBaseItemsWithSymbols = () => {
+          const items = currentItems.filter(item => 
+              item.label !== '$(warning) No results found' && 
+              item.label !== '$(sync~spin) Searching...'
+          );
+          const openEditorItems = items.filter(item => item.type === 'editor');
+          const fileAndDirItems = items.filter(item => item.type === 'file' || item.type === 'directory');
+          
+          const result: SearchItem[] = [];
+          result.push(...openEditorItems);
+          if (symbolItems.length > 0) {
+            result.push(...symbolItems);
+          }
+          result.push(...fileAndDirItems);
+          return result;
+        };
+
+        if (currentSearchId === textSearchId && !isDisposed) {
+          const intermediateItems = getBaseItemsWithSymbols();
+          if (intermediateItems.length === 0) {
+            if (quickPick.value === value) {
+              quickPick.items = [{ label: '$(sync~spin) Searching text...', alwaysShow: true, type: 'action' }];
+            }
+          } else {
+            if (quickPick.value === value) {
+               quickPick.items = intermediateItems;
+            }
+          }
+        }
+
         let textItems: SearchItem[] = [];
         if (currentSearchId === textSearchId) {
           const files = await (cachedFilesPromise || Promise.resolve([]));
@@ -254,14 +284,8 @@ async function showSearchEverywhere() {
         }
 
         if (currentSearchId === textSearchId && !isDisposed) {
-          let finalItems = currentItems.filter(item => 
-              item.label !== '$(warning) No results found' && 
-              item.label !== '$(sync~spin) Searching...'
-          );
+          let finalItems = getBaseItemsWithSymbols();
 
-          if (symbolItems.length > 0) {
-            finalItems.push(...symbolItems);
-          }
           if (textItems.length > 0) {
             finalItems.push(...textItems);
           }

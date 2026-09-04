@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 
 interface SearchItem extends vscode.QuickPickItem {
-  type: 'editor' | 'file' | 'symbol' | 'action' | 'text';
+  type: 'editor' | 'file' | 'directory' | 'symbol' | 'action' | 'text';
   uri?: vscode.Uri;
   symbol?: vscode.SymbolInformation;
   action?: 'findInFiles' | 'commands';
@@ -12,6 +12,7 @@ interface SearchItem extends vscode.QuickPickItem {
 }
 
 let cachedFilesPromise: Thenable<vscode.Uri[]> | undefined;
+let cachedDirsPromise: Thenable<vscode.Uri[]> | undefined;
 
 export function fuzzyMatch(pattern: string, text: string): boolean {
   if (!pattern) {
@@ -39,6 +40,26 @@ export function activate(context: vscode.ExtensionContext) {
 
 function refreshFileCache() {
   cachedFilesPromise = vscode.workspace.findFiles('**/*', '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**,**/build/**}');
+  cachedDirsPromise = cachedFilesPromise.then(files => {
+    const dirSet = new Set<string>();
+    for (const file of files) {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(file);
+      if (!workspaceFolder) {continue;}
+      
+      let currentPath = path.dirname(file.fsPath);
+      const rootPath = workspaceFolder.uri.fsPath;
+      
+      while (currentPath.length >= rootPath.length && currentPath.startsWith(rootPath)) {
+        if (dirSet.has(currentPath)) {break;}
+        dirSet.add(currentPath);
+        
+        const nextPath = path.dirname(currentPath);
+        if (nextPath === currentPath) {break;} // Reached root
+        currentPath = nextPath;
+      }
+    }
+    return Array.from(dirSet).map(dir => vscode.Uri.file(dir));
+  });
 }
 
 async function showSearchEverywhere() {
@@ -61,6 +82,7 @@ async function showSearchEverywhere() {
   quickPick.show();
 
   const cachedFiles = await (cachedFilesPromise || Promise.resolve([]));
+  const cachedDirs = await (cachedDirsPromise || Promise.resolve([]));
   quickPick.busy = false;
 
   const openEditors: SearchItem[] = [];
@@ -90,9 +112,20 @@ async function showSearchEverywhere() {
       alwaysShow: true
     }));
 
+  const dirItems: SearchItem[] = cachedDirs.map(uri => ({
+    label: `$(folder) ${path.basename(uri.fsPath)}`,
+    description: vscode.workspace.asRelativePath(uri),
+    type: 'directory',
+    uri: uri,
+    alwaysShow: true
+  }));
+
   const baseItems: SearchItem[] = [];
   if (openEditors.length > 0) {
     baseItems.push(...openEditors);
+  }
+  if (dirItems.length > 0) {
+    baseItems.push(...dirItems.slice(0, 20)); // Just show a few top-level dirs by default
   }
   if (fileItems.length > 0) {
     baseItems.push(...fileItems);
@@ -112,21 +145,44 @@ async function showSearchEverywhere() {
 
     const currentSearchId = ++textSearchId;
 
+    const isDirPriority = value.endsWith('/') || value.endsWith('\\');
+    const matchValue = isDirPriority ? value.slice(0, -1) : value;
+
+    const filteredDirs = dirItems.filter(item =>
+      fuzzyMatch(matchValue, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
+      fuzzyMatch(matchValue, item.description || '')
+    );
     const filteredEditors = openEditors.filter(item =>
-      fuzzyMatch(value, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
-      fuzzyMatch(value, item.description || '')
+      fuzzyMatch(matchValue, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
+      fuzzyMatch(matchValue, item.description || '')
     );
     const filteredFiles = fileItems.filter(item =>
-      fuzzyMatch(value, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
-      fuzzyMatch(value, item.description || '')
+      fuzzyMatch(matchValue, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
+      fuzzyMatch(matchValue, item.description || '')
     );
 
     let currentItems: SearchItem[] = [];
-    if (filteredEditors.length > 0) {
-      currentItems.push(...filteredEditors);
-    }
-    if (filteredFiles.length > 0) {
-      currentItems.push(...filteredFiles.slice(0, 100));
+    
+    if (isDirPriority) {
+      if (filteredDirs.length > 0) {
+        currentItems.push(...filteredDirs.slice(0, 50));
+      }
+      if (filteredEditors.length > 0) {
+        currentItems.push(...filteredEditors);
+      }
+      if (filteredFiles.length > 0) {
+        currentItems.push(...filteredFiles.slice(0, 100));
+      }
+    } else {
+      if (filteredEditors.length > 0) {
+        currentItems.push(...filteredEditors);
+      }
+      if (filteredDirs.length > 0) {
+        currentItems.push(...filteredDirs.slice(0, 20));
+      }
+      if (filteredFiles.length > 0) {
+        currentItems.push(...filteredFiles.slice(0, 100));
+      }
     }
 
     if (currentItems.length === 0 && !value) {
@@ -241,6 +297,10 @@ async function showSearchEverywhere() {
           vscode.workspace.openTextDocument(selected.uri).then(doc => {
             vscode.window.showTextDocument(doc);
           });
+        }
+      } else if (selected.type === 'directory') {
+        if (selected.uri) {
+          vscode.commands.executeCommand('revealInExplorer', selected.uri);
         }
       } else if (selected.type === 'symbol' && selected.symbol) {
         vscode.workspace.openTextDocument(selected.symbol.location.uri).then(doc => {

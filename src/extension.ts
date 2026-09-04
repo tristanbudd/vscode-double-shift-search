@@ -226,33 +226,38 @@ async function showSearchEverywhere() {
           };
         });
 
-        const getBaseItemsWithSymbols = () => {
-          const items = currentItems.filter(item => 
-              item.label !== '$(warning) No results found' && 
-              item.label !== '$(sync~spin) Searching...'
-          );
-          const openEditorItems = items.filter(item => item.type === 'editor');
-          const fileAndDirItems = items.filter(item => item.type === 'file' || item.type === 'directory');
+        const getBaseItemsWithSymbols = (isSearchingText: boolean = false) => {
+          const openEditorItems: SearchItem[] = [];
+          const fileAndDirItems: SearchItem[] = [];
+          
+          for (const item of currentItems) {
+            if (item.label === '$(warning) No results found' || item.label.includes('$(sync~spin)')) {
+              continue;
+            }
+            if (item.type === 'editor') {
+              openEditorItems.push(item);
+            } else if (item.type === 'file' || item.type === 'directory') {
+              fileAndDirItems.push(item);
+            }
+          }
           
           const result: SearchItem[] = [];
           result.push(...openEditorItems);
           if (symbolItems.length > 0) {
-            result.push(...symbolItems);
+            result.push(...symbolItems.slice(0, 50));
           }
           result.push(...fileAndDirItems);
+
+          if (isSearchingText) {
+            result.push({ label: '$(sync~spin) Searching file contents...', alwaysShow: true, type: 'action' });
+          }
+          
           return result;
         };
 
         if (currentSearchId === textSearchId && !isDisposed) {
-          const intermediateItems = getBaseItemsWithSymbols();
-          if (intermediateItems.length === 0) {
-            if (quickPick.value === value) {
-              quickPick.items = [{ label: '$(sync~spin) Searching text...', alwaysShow: true, type: 'action' }];
-            }
-          } else {
-            if (quickPick.value === value) {
-               quickPick.items = intermediateItems;
-            }
+          if (quickPick.value === value) {
+            quickPick.items = getBaseItemsWithSymbols(true);
           }
         }
 

@@ -2,6 +2,13 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [1.1.0]
+
+### Features & Enhancements
+- Implement directory searching with trailing slash priority
+- Prioritize functions and classes in search results
+- Optimize symbol rendering and add loading UX
+
 ## [1.0.4]
 
 ### Enhancements

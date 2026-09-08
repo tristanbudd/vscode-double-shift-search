@@ -2,6 +2,12 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [1.2.0]
+
+### Features & Enhancements
+- Prioritize staged Git files in search results
+- Deprioritize vendor and library folders (e.g. vendor, Pods, node_modules) with configurable folder list
+
 ## [1.1.0]
 
 ### Features & Enhancements

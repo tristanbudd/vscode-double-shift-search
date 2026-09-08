@@ -14,6 +14,60 @@ interface SearchItem extends vscode.QuickPickItem {
 let cachedFilesPromise: Thenable<vscode.Uri[]> | undefined;
 let cachedDirsPromise: Thenable<vscode.Uri[]> | undefined;
 
+const DEFAULT_DEPRIORITIZED_FOLDERS = [
+  'vendor', 'vendors', 'bower_components', 'third_party', 'third-party',
+  'packages', 'Pods', 'venv', '.venv', 'site-packages', '__pycache__',
+  'target', '.gradle', 'Carthage', 'DerivedData', '.tox', '.mypy_cache',
+  '.pytest_cache', '.next', '.nuxt', 'coverage', '.cache'
+];
+
+interface GitRepositoryState {
+  indexChanges: { uri: vscode.Uri }[];
+}
+interface GitRepository {
+  state: GitRepositoryState;
+}
+interface GitAPI {
+  repositories: GitRepository[];
+}
+interface GitExtensionExports {
+  getAPI(version: 1): GitAPI;
+}
+
+export async function getStagedFileUris(): Promise<Set<string>> {
+  const staged = new Set<string>();
+  try {
+    const gitExtension = vscode.extensions.getExtension<GitExtensionExports>('vscode.git');
+    if (!gitExtension) {
+      return staged;
+    }
+    const exports = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
+    const gitApi = exports.getAPI(1);
+    for (const repo of gitApi.repositories) {
+      for (const change of repo.state.indexChanges) {
+        staged.add(change.uri.toString());
+      }
+    }
+  } catch (e) {
+    // The built-in git extension may be disabled or unavailable; treat as no staged files.
+  }
+  return staged;
+}
+
+export function getDeprioritizedFolderSet(): Set<string> {
+  const config = vscode.workspace.getConfiguration('doubleShiftSearch');
+  const folders = config.get<string[]>('deprioritizedFolders') || DEFAULT_DEPRIORITIZED_FOLDERS;
+  return new Set(folders.map(f => f.toLowerCase()));
+}
+
+export function isInDeprioritizedFolder(fsPath: string, deprioritizedFolders: Set<string>): boolean {
+  if (deprioritizedFolders.size === 0) {
+    return false;
+  }
+  const segments = fsPath.split(/[\\/]/);
+  return segments.some(seg => deprioritizedFolders.has(seg.toLowerCase()));
+}
+
 export function fuzzyMatch(pattern: string, text: string): boolean {
   if (!pattern) {
     return true;
@@ -81,8 +135,12 @@ async function showSearchEverywhere() {
   quickPick.busy = true;
   quickPick.show();
 
-  const cachedFiles = await (cachedFilesPromise || Promise.resolve([]));
-  const cachedDirs = await (cachedDirsPromise || Promise.resolve([]));
+  const [cachedFiles, cachedDirs, stagedUris] = await Promise.all([
+    cachedFilesPromise || Promise.resolve([]),
+    cachedDirsPromise || Promise.resolve([]),
+    getStagedFileUris()
+  ]);
+  const deprioritizedFolders = getDeprioritizedFolderSet();
   quickPick.busy = false;
 
   const openEditors: SearchItem[] = [];
@@ -101,9 +159,16 @@ async function showSearchEverywhere() {
     }
   }
 
+  const getFileRank = (uri: vscode.Uri): number => {
+    if (stagedUris.has(uri.toString())) { return 0; }
+    if (isInDeprioritizedFolder(uri.fsPath, deprioritizedFolders)) { return 2; }
+    return 1;
+  };
+
   const openEditorUris = new Set(openEditors.map(e => e.uri?.toString()));
   const fileItems: SearchItem[] = cachedFiles
     .filter(uri => !openEditorUris.has(uri.toString()))
+    .sort((a, b) => getFileRank(a) - getFileRank(b))
     .map(uri => ({
       label: `$(file) ${path.basename(uri.fsPath)}`,
       description: vscode.workspace.asRelativePath(uri),
@@ -112,13 +177,19 @@ async function showSearchEverywhere() {
       alwaysShow: true
     }));
 
-  const dirItems: SearchItem[] = cachedDirs.map(uri => ({
-    label: `$(folder) ${path.basename(uri.fsPath)}`,
-    description: vscode.workspace.asRelativePath(uri),
-    type: 'directory',
-    uri: uri,
-    alwaysShow: true
-  }));
+  const dirItems: SearchItem[] = [...cachedDirs]
+    .sort((a, b) => {
+      const aDeprioritized = isInDeprioritizedFolder(a.fsPath, deprioritizedFolders);
+      const bDeprioritized = isInDeprioritizedFolder(b.fsPath, deprioritizedFolders);
+      return (aDeprioritized === bDeprioritized) ? 0 : (aDeprioritized ? 1 : -1);
+    })
+    .map(uri => ({
+      label: `$(folder) ${path.basename(uri.fsPath)}`,
+      description: vscode.workspace.asRelativePath(uri),
+      type: 'directory',
+      uri: uri,
+      alwaysShow: true
+    }));
 
   const baseItems: SearchItem[] = [];
   if (openEditors.length > 0) {
@@ -278,10 +349,22 @@ async function showSearchEverywhere() {
             
             const aIsOpen = openUris.has(aUri);
             const bIsOpen = openUris.has(bUri);
-            
+
             if (aIsOpen && !bIsOpen) { return -1; }
             if (!aIsOpen && bIsOpen) { return 1; }
-            
+
+            const aIsStaged = stagedUris.has(aUri);
+            const bIsStaged = stagedUris.has(bUri);
+
+            if (aIsStaged && !bIsStaged) { return -1; }
+            if (!aIsStaged && bIsStaged) { return 1; }
+
+            const aDeprioritized = isInDeprioritizedFolder(a.fsPath, deprioritizedFolders);
+            const bDeprioritized = isInDeprioritizedFolder(b.fsPath, deprioritizedFolders);
+
+            if (aDeprioritized && !bDeprioritized) { return 1; }
+            if (!aDeprioritized && bDeprioritized) { return -1; }
+
             return 0;
           });
 

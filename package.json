@@ -79,6 +79,37 @@
             ".mp3"
           ],
           "description": "A list of file extensions that should be completely ignored when performing a deep text search."
+        },
+        "doubleShiftSearch.deprioritizedFolders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "vendor",
+            "vendors",
+            "bower_components",
+            "third_party",
+            "third-party",
+            "packages",
+            "Pods",
+            "venv",
+            ".venv",
+            "site-packages",
+            "__pycache__",
+            "target",
+            ".gradle",
+            "Carthage",
+            "DerivedData",
+            ".tox",
+            ".mypy_cache",
+            ".pytest_cache",
+            ".next",
+            ".nuxt",
+            "coverage",
+            ".cache"
+          ],
+          "description": "A list of folder names (e.g. vendor, Pods) whose contents are ranked lower in search results instead of being hidden entirely."
         }
       }
     }

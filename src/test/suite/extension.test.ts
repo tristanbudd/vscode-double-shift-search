@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { fuzzyMatch, searchFileContents } from '../../extension';
+import { fuzzyMatch, searchFileContents, getStagedFileUris, getDeprioritizedFolderSet, isInDeprioritizedFolder } from '../../extension';
 
 suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Start all tests.');
@@ -48,6 +48,39 @@ suite('Configuration Edge Cases', () => {
     assert.ok(excludeExtensions?.includes('.zip'));
     assert.ok(excludeExtensions?.includes('.exe'));
     assert.ok(excludeExtensions?.includes('.png'));
+
+    const deprioritizedFolders = config.get<string[]>('deprioritizedFolders');
+    assert.ok(deprioritizedFolders?.includes('vendor'));
+    assert.ok(deprioritizedFolders?.includes('Pods'));
+    assert.ok(deprioritizedFolders?.includes('site-packages'));
+  });
+});
+
+suite('Staged File Priority Edge Cases', () => {
+  test('getStagedFileUris resolves to a Set even without a git repository', async () => {
+    const staged = await getStagedFileUris();
+    assert.ok(staged instanceof Set);
+  });
+});
+
+suite('Deprioritized Folder Edge Cases', () => {
+  test('getDeprioritizedFolderSet reads the configured defaults', () => {
+    const folders = getDeprioritizedFolderSet();
+    assert.ok(folders.has('vendor'));
+    assert.ok(folders.has('pods')); // Comparisons are case-insensitive
+  });
+
+  test('isInDeprioritizedFolder matches any path segment', () => {
+    const folders = new Set(['vendor', 'node_modules']);
+    assert.strictEqual(isInDeprioritizedFolder('/repo/vendor/lib/pkg.go', folders), true);
+    assert.strictEqual(isInDeprioritizedFolder('C:\\repo\\node_modules\\pkg\\index.js', folders), true);
+    assert.strictEqual(isInDeprioritizedFolder('/repo/src/pkg.go', folders), false);
+  });
+
+  test('isInDeprioritizedFolder is case-insensitive and handles an empty set', () => {
+    const folders = new Set(['pods']);
+    assert.strictEqual(isInDeprioritizedFolder('/repo/Pods/Alamofire/file.swift', folders), true);
+    assert.strictEqual(isInDeprioritizedFolder('/repo/src/file.swift', new Set()), false);
   });
 });
 

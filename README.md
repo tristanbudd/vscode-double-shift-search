@@ -31,12 +31,15 @@ Double Shift Search allows you to quickly open the command palette, find files, 
 - **Workspace Symbols**: Automatically queries your workspace symbols so you can instantly jump straight to classes, methods, and functions.
 - **Smart Multi-Term Fuzzy Matching**: Need something specific? Type multiple words (e.g., `folder config`) and it will intelligently match across your entire workspace.
 - **Open Editors First**: Prioritizes your currently open files at the top of the list for lightning-fast context switching.
+- **Staged File Priority**: Files you've staged in Git are ranked ahead of everything else, so the work you're about to commit is always a keystroke away.
+- **Vendor/Library Deprioritization**: Folders like `vendor`, `Pods`, and `node_modules` are ranked lower automatically, keeping your own code at the top of the results.
 
 ### Configuration
 
 You can customize the behavior of Double Shift Search in your VS Code settings:
 - `doubleShiftSearch.useSelectionAsQuery` (Default: `false`): Automatically pre-fills the search palette with the text you currently have selected in your active editor.
 - `doubleShiftSearch.excludeExtensions` (Default: `['.zip', '.tar', '.png', ...] `): A list of file extensions to completely ignore when searching file contents.
+- `doubleShiftSearch.deprioritizedFolders` (Default: `['vendor', 'Pods', 'site-packages', ...]`): A list of folder names to rank lower in search results, without hiding them entirely.
 
 ---
 

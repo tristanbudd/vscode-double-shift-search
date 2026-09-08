@@ -2,6 +2,11 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [1.3.1]
+
+### Enhancements
+- Update README.
+
 ## [1.3.0]
 
 ### Features & Enhancements

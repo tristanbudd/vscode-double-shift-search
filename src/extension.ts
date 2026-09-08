@@ -68,15 +68,147 @@ export function isInDeprioritizedFolder(fsPath: string, deprioritizedFolders: Se
   return segments.some(seg => deprioritizedFolders.has(seg.toLowerCase()));
 }
 
-export function fuzzyMatch(pattern: string, text: string): boolean {
-  if (!pattern) {
-    return true;
-  }
-  pattern = pattern.toLowerCase();
-  text = text.toLowerCase();
+const HUMP_SEPARATORS = new Set(['-', '_', '.', '/', '\\']);
 
-  const terms = pattern.split(' ').filter(t => t.length > 0);
-  return terms.every(term => text.includes(term));
+function isAsciiDigit(c: string): boolean { return c >= '0' && c <= '9'; }
+function isAsciiLower(c: string): boolean { return c >= 'a' && c <= 'z'; }
+function isAsciiUpper(c: string): boolean { return c >= 'A' && c <= 'Z'; }
+
+// Hump starts: index 0, the char after a separator, a digit->letter transition, or a
+// lower->upper transition. ASCII-only; does not special-case consecutive-uppercase runs
+// (e.g. "IOError").
+function getHumpIndices(text: string): number[] {
+  const indices: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (i === 0) { indices.push(i); continue; }
+    const prev = text[i - 1];
+    const curr = text[i];
+    if (HUMP_SEPARATORS.has(prev)) {
+      indices.push(i);
+    } else if (isAsciiDigit(prev) && (isAsciiLower(curr) || isAsciiUpper(curr))) {
+      indices.push(i);
+    } else if (isAsciiLower(prev) && isAsciiUpper(curr)) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
+const SUBSTRING_BASE = 1000;
+const SUBSTRING_START_BONUS = 500;
+const SUBSTRING_HUMP_BONUS = 250;
+const SUBSTRING_PROXIMITY_CAP = 50;
+const ACRONYM_BASE = 200;
+const ACRONYM_FIRST_HUMP_BONUS = 100;
+const ACRONYM_COMPACTNESS_CAP = 50;
+const ACRONYM_SKIP_PENALTY_PER_HUMP = 10;
+const LENGTH_TIEBREAK_WEIGHT = 0.1;
+
+function scoreSingleTerm(term: string, text: string): number | null {
+  const lowerTerm = term.toLowerCase();
+  const lowerText = text.toLowerCase();
+
+  // Tier 1: exact substring.
+  const idx = lowerText.indexOf(lowerTerm);
+  if (idx !== -1) {
+    let score = SUBSTRING_BASE;
+    if (idx === 0) {
+      score += SUBSTRING_START_BONUS;
+    } else if (getHumpIndices(text).includes(idx)) {
+      score += SUBSTRING_HUMP_BONUS;
+    }
+    score += Math.max(0, SUBSTRING_PROXIMITY_CAP - idx);
+    return score - text.length * LENGTH_TIEBREAK_WEIGHT;
+  }
+
+  // Tier 2: strict hump/acronym match - pattern chars must land on hump-boundary
+  // characters of text, in order (not a free subsequence over the whole string).
+  const humpIndices = getHumpIndices(text);
+  if (humpIndices.length < lowerTerm.length) {
+    return null;
+  }
+
+  let ptr = 0;
+  let firstMatchRank = -1;
+  for (let p = 0; p < lowerTerm.length; p++) {
+    const ch = lowerTerm[p];
+    let found = false;
+    while (ptr < humpIndices.length) {
+      const textCh = text[humpIndices[ptr]].toLowerCase();
+      ptr++;
+      if (textCh === ch) {
+        if (firstMatchRank === -1) { firstMatchRank = ptr - 1; }
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      return null;
+    }
+  }
+
+  let score = ACRONYM_BASE;
+  if (firstMatchRank === 0) { score += ACRONYM_FIRST_HUMP_BONUS; }
+  const skipped = ptr - lowerTerm.length;
+  score += Math.max(0, ACRONYM_COMPACTNESS_CAP - skipped * ACRONYM_SKIP_PENALTY_PER_HUMP);
+  return score - text.length * LENGTH_TIEBREAK_WEIGHT;
+}
+
+// Multi-term AND-semantics (all terms must match) combined via sum: every candidate being
+// compared already passed the AND filter, so summing rewards items where every term matches
+// strongly instead of a min() dragging a great match down to its weakest term's score.
+export function fuzzyScore(pattern: string, text: string): number | null {
+  const terms = pattern.toLowerCase().split(' ').filter(t => t.length > 0);
+  if (terms.length === 0) {
+    return 0;
+  }
+  let total = 0;
+  for (const term of terms) {
+    const s = scoreSingleTerm(term, text);
+    if (s === null) {
+      return null;
+    }
+    total += s;
+  }
+  return total;
+}
+
+export function fuzzyMatch(pattern: string, text: string): boolean {
+  return fuzzyScore(pattern, text) !== null;
+}
+
+function scoreSearchItem(item: SearchItem, query: string): number | null {
+  const label = item.label.replace(/\$\([^)]+\)/g, '').trim();
+  const labelScore = fuzzyScore(query, label);
+  const descScore = fuzzyScore(query, item.description || '');
+  if (labelScore === null && descScore === null) {
+    return null;
+  }
+  if (labelScore === null) { return descScore as number; }
+  if (descScore === null) { return labelScore; }
+  return Math.max(labelScore, descScore);
+}
+
+// Filters + scores in one pass, then sorts by (primaryRank asc, score desc). primaryRank
+// must reproduce whatever bucket order the source array already has (staged/deprioritized),
+// so this is a secondary key WITHIN existing buckets - it never reorders across them.
+function filterAndScoreItems(
+  items: SearchItem[],
+  query: string,
+  getPrimaryRank: (item: SearchItem) => number
+): SearchItem[] {
+  const scored: { item: SearchItem; score: number }[] = [];
+  for (const item of items) {
+    const score = scoreSearchItem(item, query);
+    if (score !== null) {
+      scored.push({ item, score });
+    }
+  }
+  scored.sort((a, b) => {
+    const rankDiff = getPrimaryRank(a.item) - getPrimaryRank(b.item);
+    return rankDiff !== 0 ? rankDiff : b.score - a.score;
+  });
+  return scored.map(s => s.item);
 }
 
 
@@ -219,18 +351,11 @@ async function showSearchEverywhere() {
     const isDirPriority = value.endsWith('/') || value.endsWith('\\');
     const matchValue = isDirPriority ? value.slice(0, -1) : value;
 
-    const filteredDirs = dirItems.filter(item =>
-      fuzzyMatch(matchValue, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
-      fuzzyMatch(matchValue, item.description || '')
+    const filteredDirs = filterAndScoreItems(dirItems, matchValue, item =>
+      isInDeprioritizedFolder(item.uri!.fsPath, deprioritizedFolders) ? 1 : 0
     );
-    const filteredEditors = openEditors.filter(item =>
-      fuzzyMatch(matchValue, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
-      fuzzyMatch(matchValue, item.description || '')
-    );
-    const filteredFiles = fileItems.filter(item =>
-      fuzzyMatch(matchValue, item.label.replace(/\$\([^)]+\)/g, '').trim()) ||
-      fuzzyMatch(matchValue, item.description || '')
-    );
+    const filteredEditors = filterAndScoreItems(openEditors, matchValue, () => 0);
+    const filteredFiles = filterAndScoreItems(fileItems, matchValue, item => getFileRank(item.uri!));
 
     let currentItems: SearchItem[] = [];
     

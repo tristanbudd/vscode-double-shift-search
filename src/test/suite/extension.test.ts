@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { fuzzyMatch, searchFileContents, getStagedFileUris, getDeprioritizedFolderSet, isInDeprioritizedFolder } from '../../extension';
+import { fuzzyMatch, fuzzyScore, searchFileContents, getStagedFileUris, getDeprioritizedFolderSet, isInDeprioritizedFolder } from '../../extension';
 
 suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Start all tests.');
@@ -36,6 +36,45 @@ suite('Fuzzy Match Edge Cases', () => {
   test('Partial term matching', () => {
     assert.strictEqual(fuzzyMatch('exten', 'extension.ts'), true);
     assert.strictEqual(fuzzyMatch('pack js', 'package.json'), true);
+  });
+});
+
+suite('Acronym / Hump Fuzzy Matching', () => {
+  test('Acronym matches consume hump-boundary characters in order', () => {
+    assert.strictEqual(fuzzyMatch('gua', 'getUserAccount.ts'), true);
+    assert.strictEqual(fuzzyMatch('GUA', 'getUserAccount.ts'), true); // Case-insensitive
+    assert.notStrictEqual(fuzzyScore('gua', 'getUserAccount.ts'), null);
+  });
+
+  test('Acronym match fails when characters are not on hump boundaries in order', () => {
+    // 'e', 't', 'a' exist in the text but not as hump-boundary characters in this order.
+    assert.strictEqual(fuzzyMatch('eta', 'getUserAccount.ts'), false);
+    assert.strictEqual(fuzzyScore('eta', 'getUserAccount.ts'), null);
+  });
+
+  test('Acronym match fails when pattern exceeds available hump characters', () => {
+    assert.strictEqual(fuzzyMatch('guax', 'getUserAccount.ts'), false);
+  });
+
+  test('Exact substring match always outranks acronym match', () => {
+    const substringScore = fuzzyScore('user', 'getUserAccount.ts');
+    const acronymScore = fuzzyScore('gua', 'getUserAccount.ts');
+    assert.ok(substringScore !== null && acronymScore !== null);
+    assert.ok((substringScore as number) > (acronymScore as number));
+  });
+
+  test('Shorter text wins the tiebreak on equal hump-match strength', () => {
+    // Both "getUserAccount.ts" and "globalUtilAdapter.ts" spell "gua" via their first
+    // three humps, so the tier/compactness bonuses tie; the shorter text wins the tiebreak.
+    const a = fuzzyScore('gua', 'getUserAccount.ts');
+    const b = fuzzyScore('gua', 'globalUtilAdapter.ts');
+    assert.ok(a !== null && b !== null);
+    assert.ok((a as number) > (b as number));
+  });
+
+  test('fuzzyScore of an empty/whitespace pattern is 0, not null', () => {
+    assert.strictEqual(fuzzyScore('', 'anything'), 0);
+    assert.strictEqual(fuzzyScore('   ', 'anything'), 0);
   });
 });
 

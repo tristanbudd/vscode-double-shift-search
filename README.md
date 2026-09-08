@@ -30,6 +30,7 @@ Double Shift Search allows you to quickly open the command palette, find files, 
 - **Deep Content Search**: Searches the actual contents of your files instantly, smartly skipping heavy assets (archives, media, binaries) for maximum speed.
 - **Workspace Symbols**: Automatically queries your workspace symbols so you can instantly jump straight to classes, methods, and functions.
 - **Smart Multi-Term Fuzzy Matching**: Need something specific? Type multiple words (e.g., `folder config`) and it will intelligently match across your entire workspace.
+- **CamelHump/Acronym Matching**: Type initials like `gua` to instantly jump to `getUserAccount.ts` — matches are ranked by quality, so exact and acronym hits both surface in the right order.
 - **Open Editors First**: Prioritizes your currently open files at the top of the list for lightning-fast context switching.
 - **Staged File Priority**: Files you've staged in Git are ranked ahead of everything else, so the work you're about to commit is always a keystroke away.
 - **Vendor/Library Deprioritization**: Folders like `vendor`, `Pods`, and `node_modules` are ranked lower automatically, keeping your own code at the top of the results.

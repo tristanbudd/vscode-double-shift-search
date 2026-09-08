@@ -13,7 +13,7 @@
 ![](https://img.shields.io/github/issues-pr-raw/tristanbudd/vscode-double-shift-search.svg)
 ![](https://img.shields.io/github/issues-pr-closed-raw/tristanbudd/vscode-double-shift-search.svg)
 
-A minimalist VS Code extension that brings the beloved JetBrains "Double Shift" (Search Everywhere) functionality to Visual Studio Code.
+A minimalist VS Code extension that brings the JetBrains "Double Shift" (Search Everywhere) functionality to Visual Studio Code.
 
 ---
 
@@ -25,15 +25,15 @@ Double Shift Search allows you to quickly open the command palette, find files, 
 
 ## Features
 
-- **Double Shift Trigger**: Hit `Shift` twice in rapid succession to instantly open the Search Everywhere palette.
-- **Unified Custom Palette**: A bespoke interface that replicates the beloved JetBrains Search Everywhere experience, natively integrated into VS Code without any clunky UI switching.
-- **Deep Content Search**: Searches the actual contents of your files instantly, smartly skipping heavy assets (archives, media, binaries) for maximum speed.
-- **Workspace Symbols**: Automatically queries your workspace symbols so you can instantly jump straight to classes, methods, and functions.
-- **Smart Multi-Term Fuzzy Matching**: Need something specific? Type multiple words (e.g., `folder config`) and it will intelligently match across your entire workspace.
-- **CamelHump/Acronym Matching**: Type initials like `gua` to instantly jump to `getUserAccount.ts` — matches are ranked by quality, so exact and acronym hits both surface in the right order.
-- **Open Editors First**: Prioritizes your currently open files at the top of the list for lightning-fast context switching.
-- **Staged File Priority**: Files you've staged in Git are ranked ahead of everything else, so the work you're about to commit is always a keystroke away.
-- **Vendor/Library Deprioritization**: Folders like `vendor`, `Pods`, and `node_modules` are ranked lower automatically, keeping your own code at the top of the results.
+- **Double Shift Trigger**: Hit `Shift` twice rapidly to open the Search Everywhere palette.
+- **Unified Custom Palette**: An interface that replicates the JetBrains Search Everywhere experience, natively integrated into VS Code.
+- **Deep Content Search**: Searches file contents instantly, skipping heavy assets (archives, media, binaries) for maximum speed.
+- **Workspace Symbols**: Queries workspace symbols to jump straight to classes, methods, and functions.
+- **Smart Multi-Term Fuzzy Matching**: Type multiple words (e.g., `folder config`) to match across your entire workspace.
+- **CamelHump/Acronym Matching**: Type initials like `gua` to jump to `getUserAccount.ts`. Matches are ranked by quality.
+- **Open Editors First**: Prioritizes currently open files at the top of the list.
+- **Staged File Priority**: Files staged in Git are ranked ahead of everything else.
+- **Vendor/Library Deprioritization**: Folders like `vendor`, `Pods`, and `node_modules` are ranked lower automatically.
 
 ### Configuration
 

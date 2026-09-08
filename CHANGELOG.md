@@ -2,6 +2,12 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [1.3.0]
+
+### Features & Enhancements
+- Add CamelHump/acronym search matching (e.g. `gua` matches `getUserAccount.ts`)
+- Rank search results by match quality within existing priority groups (active/open editors, staged files, deprioritized folders)
+
 ## [1.2.0]
 
 ### Features & Enhancements

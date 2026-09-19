@@ -34,6 +34,12 @@ interface GitExtensionExports {
   getAPI(version: 1): GitAPI;
 }
 
+const WATCHER_IGNORED_SEGMENTS = new Set(['node_modules', '.git', 'out', 'dist', 'build']);
+
+function isWatcherIgnoredPath(fsPath: string): boolean {
+  return fsPath.split(/[\\/]/).some(seg => WATCHER_IGNORED_SEGMENTS.has(seg));
+}
+
 export async function getStagedFileUris(): Promise<Set<string>> {
   const staged = new Set<string>();
   try {
@@ -216,9 +222,16 @@ export function activate(context: vscode.ExtensionContext) {
   refreshFileCache();
 
   const watcher = vscode.workspace.createFileSystemWatcher('**/*');
-  watcher.onDidCreate(() => refreshFileCache());
-  watcher.onDidDelete(() => refreshFileCache());
+  const onWatcherEvent = (uri: vscode.Uri) => {
+    if (!isWatcherIgnoredPath(uri.fsPath)) {
+      refreshFileCache();
+    }
+  };
+  watcher.onDidCreate(onWatcherEvent);
+  watcher.onDidDelete(onWatcherEvent);
   context.subscriptions.push(watcher);
+
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => refreshFileCache()));
 
   let disposable = vscode.commands.registerCommand('doubleShiftSearch.search', showSearchEverywhere);
   context.subscriptions.push(disposable);
@@ -234,8 +247,13 @@ function refreshFileCache() {
       
       let currentPath = path.dirname(file.fsPath);
       const rootPath = workspaceFolder.uri.fsPath;
-      
-      while (currentPath.length >= rootPath.length && currentPath.startsWith(rootPath)) {
+
+      // On Windows, fsPath casing (e.g. the drive letter) isn't guaranteed consistent
+      // between a workspace folder URI and a file URI, so compare case-insensitively.
+      const normalizeForComparison = (p: string): string => process.platform === 'win32' ? p.toLowerCase() : p;
+      const normalizedRootPath = normalizeForComparison(rootPath);
+
+      while (currentPath.length >= rootPath.length && normalizeForComparison(currentPath).startsWith(normalizedRootPath)) {
         if (dirSet.has(currentPath)) {break;}
         dirSet.add(currentPath);
         
@@ -255,6 +273,10 @@ async function showSearchEverywhere() {
   quickPick.matchOnDetail = true;
 
   let isDisposed = false;
+  quickPick.onDidHide(() => {
+    isDisposed = true;
+    quickPick.dispose();
+  });
 
   const config = vscode.workspace.getConfiguration('doubleShiftSearch');
   if (config.get<boolean>('useSelectionAsQuery')) {
@@ -267,11 +289,27 @@ async function showSearchEverywhere() {
   quickPick.busy = true;
   quickPick.show();
 
-  const [cachedFiles, cachedDirs, stagedUris] = await Promise.all([
-    cachedFilesPromise || Promise.resolve([]),
-    cachedDirsPromise || Promise.resolve([]),
-    getStagedFileUris()
-  ]);
+  let cachedFiles: vscode.Uri[];
+  let cachedDirs: vscode.Uri[];
+  let stagedUris: Set<string>;
+  try {
+    [cachedFiles, cachedDirs, stagedUris] = await Promise.all([
+      cachedFilesPromise || Promise.resolve([]),
+      cachedDirsPromise || Promise.resolve([]),
+      getStagedFileUris()
+    ]);
+  } catch (e) {
+    console.error('Failed to load search data', e);
+    if (!isDisposed) {
+      quickPick.busy = false;
+    }
+    return;
+  }
+
+  if (isDisposed) {
+    return;
+  }
+
   const deprioritizedFolders = getDeprioritizedFolderSet();
   quickPick.busy = false;
 
@@ -309,11 +347,14 @@ async function showSearchEverywhere() {
       alwaysShow: true
     }));
 
+  const getPathDepth = (fsPath: string): number => fsPath.split(/[\\/]/).length;
+
   const dirItems: SearchItem[] = [...cachedDirs]
     .sort((a, b) => {
       const aDeprioritized = isInDeprioritizedFolder(a.fsPath, deprioritizedFolders);
       const bDeprioritized = isInDeprioritizedFolder(b.fsPath, deprioritizedFolders);
-      return (aDeprioritized === bDeprioritized) ? 0 : (aDeprioritized ? 1 : -1);
+      if (aDeprioritized !== bDeprioritized) { return aDeprioritized ? 1 : -1; }
+      return getPathDepth(a.fsPath) - getPathDepth(b.fsPath);
     })
     .map(uri => ({
       label: `$(folder) ${path.basename(uri.fsPath)}`,
@@ -390,6 +431,7 @@ async function showSearchEverywhere() {
     quickPick.items = currentItems;
 
     if (!value) {
+      quickPick.busy = false;
       return;
     }
 
@@ -561,11 +603,6 @@ async function showSearchEverywhere() {
     }
     quickPick.hide();
   });
-
-  quickPick.onDidHide(() => {
-    isDisposed = true;
-    quickPick.dispose();
-  });
 }
 
 export function deactivate() { }
@@ -619,17 +656,41 @@ export async function searchFileContents(query: string, files: vscode.Uri[], isC
         if (match) {
           const index = match.index;
           const startOfLine = content.lastIndexOf('\n', index) + 1;
-          let endOfLine = content.indexOf('\n', index);
-          if (endOfLine === -1 || endOfLine - startOfLine > 500) {
-            endOfLine = Math.min(content.length, startOfLine + 500);
+          const rawEndOfLine = content.indexOf('\n', index);
+          const endOfLine = rawEndOfLine === -1 ? content.length : rawEndOfLine;
+
+          // Cap the snippet length, but center the window on the match itself so a hit
+          // past offset 500 on a long line still shows up in the preview.
+          const maxSnippetLength = 500;
+          let sliceStart = startOfLine;
+          let sliceEnd = endOfLine;
+          if (sliceEnd - sliceStart > maxSnippetLength) {
+            sliceStart = Math.max(startOfLine, index - Math.floor(maxSnippetLength / 2));
+            sliceEnd = Math.min(endOfLine, sliceStart + maxSnippetLength);
           }
 
-          const lineText = content.slice(startOfLine, endOfLine).trim();
+          const snippet = content.slice(sliceStart, sliceEnd);
+          const matchOffset = index - sliceStart;
           const lineNumber = content.slice(0, index).split('\n').length;
+
+          // Same centering applies to the shorter display window, so the match still
+          // survives being cropped down to a description-sized preview.
+          const maxDescriptionLength = 80;
+          let description: string;
+          if (snippet.length > maxDescriptionLength) {
+            let descStart = Math.max(0, matchOffset - Math.floor(maxDescriptionLength / 2));
+            const descEnd = Math.min(snippet.length, descStart + maxDescriptionLength);
+            descStart = Math.max(0, descEnd - maxDescriptionLength);
+            const prefix = descStart > 0 ? '...' : '';
+            const suffix = descEnd < snippet.length ? '...' : '';
+            description = `${prefix}${snippet.slice(descStart, descEnd).trim()}${suffix}`;
+          } else {
+            description = snippet.trim();
+          }
 
           fileResults.push({
             label: `$(text-size) ${path.basename(uri.fsPath)}:${lineNumber}`,
-            description: lineText.length > 80 ? lineText.substring(0, 80) + '...' : lineText,
+            description: description,
             type: 'text',
             uri: uri,
             lineNumber: lineNumber,

@@ -1,6 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as os from 'os';
+import { writeFile, unlink } from 'fs/promises';
 import { fuzzyMatch, fuzzyScore, searchFileContents, getStagedFileUris, getDeprioritizedFolderSet, isInDeprioritizedFolder } from '../../extension';
 
 suite('Extension Test Suite', () => {
@@ -154,5 +156,20 @@ suite('File Search Edge Cases', () => {
     // Find a common character like "e" with a max limit of 2
     const results = await searchFileContents('e', [pkgJsonUri], () => false, 2);
     assert.ok(results.length <= 2, 'Should not return more results than maxResults');
+  });
+
+  test('searchFileContents keeps the match visible when it falls past the snippet cap on a long line', async () => {
+    const tmpFile = vscode.Uri.file(path.join(os.tmpdir(), `dss-long-line-${Date.now()}.txt`));
+    const padding = 'x'.repeat(600);
+    const needle = 'NEEDLE_TOKEN';
+    await writeFile(tmpFile.fsPath, `${padding}${needle}${padding}`, 'utf8');
+
+    try {
+      const results = await searchFileContents(needle, [tmpFile], () => false);
+      assert.ok(results.length > 0, 'Should find the match');
+      assert.ok(results[0].description?.includes(needle), 'Snippet should include the matched text');
+    } finally {
+      await unlink(tmpFile.fsPath);
+    }
   });
 });

@@ -2,6 +2,17 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [1.3.2]
+
+### Bug Fixes
+- Fixed the file watcher triggering a full cache refresh for changes inside node_modules, .git, and other ignored folders.
+- Fixed the search palette leaking its disposable and getting stuck busy if closed before the initial file scan finished.
+- Fixed the search spinner staying stuck after clearing the query while a symbol or text search was still in flight.
+- Fixed directory indexing missing folders on Windows due to a case sensitive path comparison.
+- Fixed newly added workspace folders not appearing in search results until a file inside them changed.
+- Fixed default directory results not consistently showing top-level folders first.
+- Fixed long file matches being cut off from the search result preview.
+
 ## [1.3.1]
 
 ### Enhancements

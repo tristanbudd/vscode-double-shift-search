@@ -2,6 +2,12 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [1.4.0]
+
+### Features & Enhancements
+- Add persistent history tracking for recently opened files
+- Add doubleShiftSearch.maxRecentFiles configuration setting to limit history
+
 ## [1.3.2]
 
 ### Bug Fixes

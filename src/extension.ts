@@ -233,7 +233,28 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => refreshFileCache()));
 
-  let disposable = vscode.commands.registerCommand('doubleShiftSearch.search', showSearchEverywhere);
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+      if (editor && editor.document.uri.scheme === 'file') {
+        const config = vscode.workspace.getConfiguration('doubleShiftSearch');
+        const maxRecent = config.get<number>('maxRecentFiles') || 10;
+        
+        let recentFiles = context.workspaceState.get<string[]>('dss.recentFiles') || [];
+        const uriString = editor.document.uri.toString();
+        
+        recentFiles = recentFiles.filter(u => u !== uriString);
+        recentFiles.unshift(uriString);
+        
+        if (recentFiles.length > maxRecent) {
+          recentFiles = recentFiles.slice(0, maxRecent);
+        }
+        
+        context.workspaceState.update('dss.recentFiles', recentFiles);
+      }
+    })
+  );
+
+  let disposable = vscode.commands.registerCommand('doubleShiftSearch.search', () => showSearchEverywhere(context));
   context.subscriptions.push(disposable);
 }
 
@@ -266,7 +287,7 @@ function refreshFileCache() {
   });
 }
 
-async function showSearchEverywhere() {
+async function showSearchEverywhere(context: vscode.ExtensionContext) {
   const quickPick = vscode.window.createQuickPick<SearchItem>();
   quickPick.placeholder = 'Search Everywhere (Files, Symbols, Open Editors)';
   quickPick.matchOnDescription = true;
@@ -314,17 +335,38 @@ async function showSearchEverywhere() {
   quickPick.busy = false;
 
   const openEditors: SearchItem[] = [];
+  const addedUris = new Set<string>();
+  const recentUris = context.workspaceState.get<string[]>('dss.recentFiles') || [];
+
+  for (const uriStr of recentUris) {
+    try {
+      const uri = vscode.Uri.parse(uriStr);
+      addedUris.add(uriStr);
+      openEditors.push({
+        label: `$(history) ${path.basename(uri.fsPath)}`,
+        description: vscode.workspace.asRelativePath(uri),
+        type: 'editor',
+        uri: uri,
+        alwaysShow: true
+      });
+    } catch (e) {}
+  }
+
   for (const tabGroup of vscode.window.tabGroups.all) {
     for (const tab of tabGroup.tabs) {
       if (tab.input instanceof vscode.TabInputText) {
         const uri = tab.input.uri;
-        openEditors.push({
-          label: `$(history) ${path.basename(uri.fsPath)}`,
-          description: vscode.workspace.asRelativePath(uri),
-          type: 'editor',
-          uri: uri,
-          alwaysShow: true
-        });
+        const uriStr = uri.toString();
+        if (!addedUris.has(uriStr)) {
+          addedUris.add(uriStr);
+          openEditors.push({
+            label: `$(history) ${path.basename(uri.fsPath)}`,
+            description: vscode.workspace.asRelativePath(uri),
+            type: 'editor',
+            uri: uri,
+            alwaysShow: true
+          });
+        }
       }
     }
   }

@@ -56,6 +56,11 @@
           "default": false,
           "description": "Automatically pre-fill the search palette with the text currently selected in the active editor."
         },
+        "doubleShiftSearch.maxRecentFiles": {
+          "type": "number",
+          "default": 10,
+          "description": "The maximum number of recent files to store and display at the top of the search palette."
+        },
         "doubleShiftSearch.excludeExtensions": {
           "type": "array",
           "items": {

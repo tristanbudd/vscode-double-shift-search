@@ -2,7 +2,7 @@
   "name": "double-shift-search",
   "displayName": "Double Shift Search",
   "description": "DSS | Double Shift Search | JetBrains-Style Navigation | Open Search Everywhere",
-  "version": "1.4.1",
+  "version": "2.0.0",
   "publisher": "tristanbudd",
   "author": "Tristan Budd <https://github.com/tristanbudd>",
   "icon": "icon.png",
@@ -81,9 +81,34 @@
             ".ico",
             ".pdf",
             ".mp4",
-            ".mp3"
+            ".mp3",
+            ".pdb",
+            ".so",
+            ".dylib",
+            ".a",
+            ".lib",
+            ".o",
+            ".obj",
+            ".class",
+            ".jar",
+            ".pyc",
+            ".nupkg",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".otf",
+            ".db",
+            ".sqlite"
           ],
           "description": "A list of file extensions that should be completely ignored when performing a deep text search."
+        },
+        "doubleShiftSearch.excludeFolders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "A list of folder names to completely exclude from search results. By default, Double Shift Search respects your workspace files.exclude and search.exclude settings, as well as .gitignore."
         },
         "doubleShiftSearch.deprioritizedFolders": {
           "type": "array",

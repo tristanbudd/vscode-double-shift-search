@@ -2,6 +2,16 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [2.0.0]
+
+### Features & Enhancements
+- Double Shift Search now natively respects your workspace `files.exclude` and `search.exclude` settings, as well as `.gitignore`.
+- Add a new `doubleShiftSearch.excludeFolders` setting for additional custom folder exclusions.
+- Expand default list of `doubleShiftSearch.excludeExtensions` to cover common compiled outputs like `.pdb`, `.so`, `.class`, etc.
+- Add intelligent binary sniffing before deep searching file contents to prevent garbled matches from unknown binary formats.
+- Resolves #1
+
+
 ## [1.4.1]
 
 ### Enhancements

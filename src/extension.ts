@@ -259,7 +259,20 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function refreshFileCache() {
-  cachedFilesPromise = vscode.workspace.findFiles('**/*', '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**,**/build/**}');
+  const config = vscode.workspace.getConfiguration('doubleShiftSearch');
+  const excludeFolders = config.get<string[]>('excludeFolders') || [];
+
+  cachedFilesPromise = vscode.workspace.findFiles('**/*').then(files => {
+    if (excludeFolders.length === 0) {
+      return files;
+    }
+    const isWin = process.platform === 'win32';
+    const excludeSet = new Set(excludeFolders.map(f => isWin ? f.toLowerCase() : f));
+    return files.filter(file => {
+      const parts = file.fsPath.split(/[\\/]/);
+      return !parts.some(part => excludeSet.has(isWin ? part.toLowerCase() : part));
+    });
+  });
   cachedDirsPromise = cachedFilesPromise.then(files => {
     const dirSet = new Set<string>();
     for (const file of files) {
@@ -656,7 +669,8 @@ export async function searchFileContents(query: string, files: vscode.Uri[], isC
 
   const config = vscode.workspace.getConfiguration('doubleShiftSearch');
   const excludeExtensionsList = config.get<string[]>('excludeExtensions') || [
-    '.zip', '.tar', '.gz', '.7z', '.rar', '.exe', '.dll', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.mp4', '.mp3'
+    '.zip', '.tar', '.gz', '.7z', '.rar', '.exe', '.dll', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.pdf', '.mp4', '.mp3',
+    '.pdb', '.so', '.dylib', '.a', '.lib', '.o', '.obj', '.class', '.jar', '.pyc', '.nupkg', '.woff', '.woff2', '.ttf', '.otf', '.db', '.sqlite'
   ];
   const skipExtensions = new Set(excludeExtensionsList.map(ext => ext.toLowerCase()));
 
@@ -689,6 +703,32 @@ export async function searchFileContents(query: string, files: vscode.Uri[], isC
           if (stat.size > 1024 * 1024) {
             return [];
           }
+
+          let fd;
+          try {
+            fd = await fs.open(uri.fsPath, 'r');
+            const buffer = Buffer.alloc(4096);
+            const { bytesRead } = await fd.read(buffer, 0, 4096, 0);
+            
+            let isBinary = false;
+            for (let j = 0; j < bytesRead; j++) {
+              if (buffer[j] === 0x00) {
+                isBinary = true;
+                break;
+              }
+            }
+            if (isBinary) {
+              return [];
+            }
+          } catch (e) {
+            // Ignore open/read errors and just skip file
+            return [];
+          } finally {
+            if (fd) {
+              await fd.close();
+            }
+          }
+
           content = await fs.readFile(uri.fsPath, 'utf8');
         }
 

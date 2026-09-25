@@ -1,5 +1,5 @@
 <div align="center">
-    <img width="600" height="300" alt="Double Shift Search Banner" src="https://github.com/user-attachments/assets/bf67e5a5-3360-4046-9278-4f0fd5a6517e" />
+    <img width="300" height="300" alt="DSS Logo" src="https://github.com/user-attachments/assets/3db13495-7ebc-4b6f-bb02-8e42768e64c1" />
 </div>
 
 # Double Shift Search (VS Code Extension)

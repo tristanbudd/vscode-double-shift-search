@@ -2,6 +2,11 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [2.0.1]
+
+### Bug Fixes
+- Fixed an issue where closing and reopening the search palette repeatedly could cause heavy search operations to run concurrently and lag the extension.
+
 ## [2.0.0]
 
 ### Features & Enhancements

@@ -13,6 +13,7 @@ interface SearchItem extends vscode.QuickPickItem {
 
 let cachedFilesPromise: Thenable<vscode.Uri[]> | undefined;
 let cachedDirsPromise: Thenable<vscode.Uri[]> | undefined;
+let activeSearchCts: vscode.CancellationTokenSource | undefined;
 
 const DEFAULT_DEPRIORITIZED_FOLDERS = [
   'vendor', 'vendors', 'bower_components', 'third_party', 'third-party',
@@ -301,6 +302,13 @@ function refreshFileCache() {
 }
 
 async function showSearchEverywhere(context: vscode.ExtensionContext) {
+  if (activeSearchCts) {
+    activeSearchCts.cancel();
+    activeSearchCts.dispose();
+  }
+  activeSearchCts = new vscode.CancellationTokenSource();
+  const currentCts = activeSearchCts;
+
   const quickPick = vscode.window.createQuickPick<SearchItem>();
   quickPick.placeholder = 'Search Everywhere (Files, Symbols, Open Editors)';
   quickPick.matchOnDescription = true;
@@ -309,6 +317,7 @@ async function showSearchEverywhere(context: vscode.ExtensionContext) {
   let isDisposed = false;
   quickPick.onDidHide(() => {
     isDisposed = true;
+    currentCts.cancel();
     quickPick.dispose();
   });
 
@@ -590,7 +599,7 @@ async function showSearchEverywhere(context: vscode.ExtensionContext) {
             return 0;
           });
 
-          textItems = await searchFileContents(value, sortedFiles, () => currentSearchId !== textSearchId);
+          textItems = await searchFileContents(value, sortedFiles, () => currentSearchId !== textSearchId || isDisposed || currentCts.token.isCancellationRequested);
         }
 
         if (currentSearchId === textSearchId && !isDisposed) {

@@ -35,10 +35,88 @@ interface GitExtensionExports {
   getAPI(version: 1): GitAPI;
 }
 
-const WATCHER_IGNORED_SEGMENTS = new Set(['node_modules', '.git', 'out', 'dist', 'build']);
+const DEFAULT_MAX_FILES = 100000;
+const REFRESH_DEBOUNCE_MS = 1000;
+const GLOB_SPECIAL_CHARS = /[*?[\]{}]/;
+
+let refreshTimer: NodeJS.Timeout | undefined;
+let hasWarnedAboutFileCap = false;
+
+export function expandBraces(pattern: string): string[] {
+  const open = pattern.indexOf('{');
+  if (open === -1) {
+    return [pattern];
+  }
+  let depth = 0;
+  let close = -1;
+  const commas: number[] = [];
+  for (let i = open; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) { close = i; break; }
+    } else if (ch === ',' && depth === 1) {
+      commas.push(i);
+    }
+  }
+  if (close === -1) {
+    return [pattern];
+  }
+  const prefix = pattern.slice(0, open);
+  const suffix = pattern.slice(close + 1);
+  const bounds = [open, ...commas, close];
+  const results: string[] = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const option = pattern.slice(bounds[i] + 1, bounds[i + 1]);
+    results.push(...expandBraces(prefix + option + suffix));
+  }
+  return results;
+}
+
+export function getExcludePatterns(scope?: vscode.Uri): string[] {
+  const patterns = new Set<string>();
+  for (const section of ['files.exclude', 'search.exclude']) {
+    const map = vscode.workspace.getConfiguration(undefined, scope).get<Record<string, unknown>>(section) || {};
+    for (const [glob, enabled] of Object.entries(map)) {
+      if (enabled === true) {
+        expandBraces(glob).forEach(p => patterns.add(p));
+      }
+    }
+  }
+  const excludeFolders = vscode.workspace.getConfiguration('doubleShiftSearch', scope).get<string[]>('excludeFolders') || [];
+  for (const folder of excludeFolders) {
+    const name = folder.trim().replace(/^[\\/]+|[\\/]+$/g, '').replace(/\\/g, '/');
+    if (name) {
+      patterns.add(`**/${name}`);
+    }
+  }
+  return Array.from(patterns);
+}
+
+export function buildExcludeGlob(patterns: string[]): string | undefined {
+  if (patterns.length === 0) {
+    return undefined;
+  }
+  return patterns.length === 1 ? patterns[0] : `{${patterns.join(',')}}`;
+}
+
+export function getExcludedFolderNames(patterns: string[]): Set<string> {
+  const names = new Set<string>(['.git']);
+  for (const pattern of patterns) {
+    const match = /^\*\*\/([^/]+?)(\/\*\*)?$/.exec(pattern);
+    if (match && !GLOB_SPECIAL_CHARS.test(match[1])) {
+      names.add(match[1].toLowerCase());
+    }
+  }
+  return names;
+}
 
 function isWatcherIgnoredPath(fsPath: string): boolean {
-  return fsPath.split(/[\\/]/).some(seg => WATCHER_IGNORED_SEGMENTS.has(seg));
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(fsPath));
+  const ignored = getExcludedFolderNames(getExcludePatterns(workspaceFolder?.uri));
+  return fsPath.split(/[\\/]/).some(seg => ignored.has(seg.toLowerCase()));
 }
 
 export async function getStagedFileUris(): Promise<Set<string>> {
@@ -225,14 +303,25 @@ export function activate(context: vscode.ExtensionContext) {
   const watcher = vscode.workspace.createFileSystemWatcher('**/*');
   const onWatcherEvent = (uri: vscode.Uri) => {
     if (!isWatcherIgnoredPath(uri.fsPath)) {
-      refreshFileCache();
+      scheduleRefreshFileCache();
     }
   };
   watcher.onDidCreate(onWatcherEvent);
   watcher.onDidDelete(onWatcherEvent);
   context.subscriptions.push(watcher);
+  context.subscriptions.push({ dispose: () => refreshTimer && clearTimeout(refreshTimer) });
 
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => refreshFileCache()));
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+    if (
+      e.affectsConfiguration('files.exclude') ||
+      e.affectsConfiguration('search.exclude') ||
+      e.affectsConfiguration('doubleShiftSearch.excludeFolders') ||
+      e.affectsConfiguration('doubleShiftSearch.maxFiles')
+    ) {
+      scheduleRefreshFileCache();
+    }
+  }));
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(editor => {
@@ -259,21 +348,43 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(disposable);
 }
 
-function refreshFileCache() {
-  const config = vscode.workspace.getConfiguration('doubleShiftSearch');
-  const excludeFolders = config.get<string[]>('excludeFolders') || [];
+function scheduleRefreshFileCache() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+  }
+  refreshTimer = setTimeout(() => {
+    refreshTimer = undefined;
+    refreshFileCache();
+  }, REFRESH_DEBOUNCE_MS);
+}
 
-  cachedFilesPromise = vscode.workspace.findFiles('**/*').then(files => {
-    if (excludeFolders.length === 0) {
-      return files;
+export async function findWorkspaceFiles(): Promise<vscode.Uri[]> {
+  const config = vscode.workspace.getConfiguration('doubleShiftSearch');
+  const maxFiles = Math.max(1, config.get<number>('maxFiles') || DEFAULT_MAX_FILES);
+  const files: vscode.Uri[] = [];
+
+  for (const folder of vscode.workspace.workspaceFolders || []) {
+    const remaining = maxFiles - files.length;
+    if (remaining <= 0) {
+      break;
     }
-    const isWin = process.platform === 'win32';
-    const excludeSet = new Set(excludeFolders.map(f => isWin ? f.toLowerCase() : f));
-    return files.filter(file => {
-      const parts = file.fsPath.split(/[\\/]/);
-      return !parts.some(part => excludeSet.has(isWin ? part.toLowerCase() : part));
-    });
-  });
+    const exclude = buildExcludeGlob(getExcludePatterns(folder.uri));
+    const found = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*'), exclude, remaining);
+    files.push(...found);
+  }
+
+  if (files.length >= maxFiles && !hasWarnedAboutFileCap) {
+    hasWarnedAboutFileCap = true;
+    vscode.window.showWarningMessage(
+      `Double Shift Search indexed the first ${maxFiles} files in this workspace and skipped the rest. ` +
+      'Add large folders to search.exclude or doubleShiftSearch.excludeFolders, or raise doubleShiftSearch.maxFiles.'
+    );
+  }
+  return files;
+}
+
+function refreshFileCache() {
+  cachedFilesPromise = findWorkspaceFiles();
   cachedDirsPromise = cachedFilesPromise.then(files => {
     const dirSet = new Set<string>();
     for (const file of files) {

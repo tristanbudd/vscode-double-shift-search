@@ -108,7 +108,13 @@
             "type": "string"
           },
           "default": [],
-          "description": "A list of folder names to completely exclude from search results. By default, Double Shift Search respects your workspace files.exclude and search.exclude settings, as well as .gitignore."
+          "description": "A list of folder names to completely exclude from search results. These are applied on top of your workspace files.exclude and search.exclude settings."
+        },
+        "doubleShiftSearch.maxFiles": {
+          "type": "number",
+          "default": 100000,
+          "minimum": 1,
+          "description": "The maximum number of files to index for the search palette. Acts as a safety cap for very large workspaces."
         },
         "doubleShiftSearch.deprioritizedFolders": {
           "type": "array",

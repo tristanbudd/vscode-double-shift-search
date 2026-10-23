@@ -41,6 +41,8 @@ You can customize the behavior of Double Shift Search in your VS Code settings:
 - `doubleShiftSearch.useSelectionAsQuery` (Default: `false`): Automatically pre-fills the search palette with the text you currently have selected in your active editor.
 - `doubleShiftSearch.excludeExtensions` (Default: `['.zip', '.tar', '.png', ...] `): A list of file extensions to completely ignore when searching file contents.
 - `doubleShiftSearch.deprioritizedFolders` (Default: `['vendor', 'Pods', 'site-packages', ...]`): A list of folder names to rank lower in search results, without hiding them entirely.
+- `doubleShiftSearch.excludeFolders` (Default: `[]`): A list of folder names to exclude from search entirely, on top of your `files.exclude` and `search.exclude` settings.
+- `doubleShiftSearch.maxFiles` (Default: `100000`): The maximum number of files to index. Acts as a safety cap for very large workspaces.
 
 ---
 

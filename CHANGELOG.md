@@ -2,6 +2,15 @@
 
 All notable changes to the "double-shift-search" extension will be documented in this file.
 
+## [2.0.2]
+
+### Bug Fixes
+- Fixed the VS Code window crashing with an out of memory error in workspaces with a very large number of files. Exclusions are now passed directly into the file search, so excluded folders like `node_modules` are never enumerated.
+- The file index now honors `search.exclude` in addition to `files.exclude` and `doubleShiftSearch.excludeFolders`.
+- The file watcher now reuses your exclusions instead of a hardcoded list, and rescans are debounced so builds writing to folders like `bin/` and `obj/` no longer trigger repeated full rescans.
+- Add a new `doubleShiftSearch.maxFiles` setting (default `100000`) as a safety cap on the number of indexed files.
+- Resolves #4
+
 ## [2.0.1]
 
 ### Bug Fixes

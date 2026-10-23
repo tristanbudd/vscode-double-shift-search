@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import { writeFile, unlink } from 'fs/promises';
-import { fuzzyMatch, fuzzyScore, searchFileContents, getStagedFileUris, getDeprioritizedFolderSet, isInDeprioritizedFolder } from '../../extension';
+import { fuzzyMatch, fuzzyScore, searchFileContents, getStagedFileUris, getDeprioritizedFolderSet, isInDeprioritizedFolder, expandBraces, buildExcludeGlob, getExcludePatterns, getExcludedFolderNames } from '../../extension';
 
 suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Start all tests.');
@@ -171,5 +171,35 @@ suite('File Search Edge Cases', () => {
     } finally {
       await unlink(tmpFile.fsPath);
     }
+  });
+});
+
+suite('Workspace File Excludes', () => {
+  test('expandBraces flattens brace groups, including nested ones', () => {
+    assert.deepStrictEqual(expandBraces('**/node_modules'), ['**/node_modules']);
+    assert.deepStrictEqual(expandBraces('**/{bin,obj}'), ['**/bin', '**/obj']);
+    assert.deepStrictEqual(expandBraces('**/*.{js,{map,d.ts}}'), ['**/*.js', '**/*.map', '**/*.d.ts']);
+    assert.deepStrictEqual(expandBraces('**/{broken'), ['**/{broken']);
+  });
+
+  test('buildExcludeGlob merges patterns into a single glob', () => {
+    assert.strictEqual(buildExcludeGlob([]), undefined);
+    assert.strictEqual(buildExcludeGlob(['**/node_modules']), '**/node_modules');
+    assert.strictEqual(buildExcludeGlob(['**/node_modules', '**/bin']), '{**/node_modules,**/bin}');
+  });
+
+  test('getExcludePatterns includes the default search.exclude and files.exclude entries', () => {
+    const patterns = getExcludePatterns();
+    assert.ok(patterns.includes('**/node_modules'), 'search.exclude default should be included');
+    assert.ok(patterns.includes('**/.git'), 'files.exclude default should be included');
+  });
+
+  test('getExcludedFolderNames picks out plain folder patterns for the watcher', () => {
+    const names = getExcludedFolderNames(['**/node_modules', '**/bin/**', '**/*.code-search', 'src/generated']);
+    assert.ok(names.has('node_modules'));
+    assert.ok(names.has('bin'));
+    assert.ok(names.has('.git'));
+    assert.ok(!names.has('*.code-search'));
+    assert.ok(!names.has('generated'));
   });
 });
